@@ -1,0 +1,138 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Dashboard - Glonass Import API{% endblock %}
+
+{% block body %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-truck"></i> Total Vehicles</h5>
+                <h2 class="card-text">{{ totalVehicles }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-geo-alt"></i> Vehicles with Position</h5>
+                <h2 class="card-text">{{ vehiclesWithPosition }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-percent"></i> Coverage</h5>
+                <h2 class="card-text">
+                    {% if totalVehicles > 0 %}
+                        {{ ((vehiclesWithPosition / totalVehicles) * 100)|round }}%
+                    {% else %}
+                        0%
+                    {% endif %}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Recent Vehicles</h5>
+            </div>
+            <div class="card-body">
+                {% if recentVehicles|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Plate Number</th>
+                                    <th>Position</th>
+                                    <th>Speed</th>
+                                    <th>Last Update</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vehicle in recentVehicles %}
+                                    <tr>
+                                        <td>{{ vehicle.id }}</td>
+                                        <td>{{ vehicle.name ?? 'N/A' }}</td>
+                                        <td>{{ vehicle.plateNumber ?? 'N/A' }}</td>
+                                        <td>
+                                            {% if vehicle.latitude and vehicle.longitude %}
+                                                {{ vehicle.latitude|number_format(6) }}, {{ vehicle.longitude|number_format(6) }}
+                                            {% else %}
+                                                <span class="text-muted">No position</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if vehicle.speed %}
+                                                {{ vehicle.speed|number_format(1) }} km/h
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if vehicle.lastPositionTime %}
+                                                {{ vehicle.lastPositionTime|date('Y-m-d H:i:s') }}
+                                            {% else %}
+                                                <span class="text-muted">Never</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ path('vehicles_show', {id: vehicle.id}) }}" class="btn btn-sm btn-primary">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <a href="{{ path('vehicles_index') }}" class="btn btn-outline-primary">
+                        View All Vehicles <i class="bi bi-arrow-right"></i>
+                    </a>
+                {% else %}
+                    <p class="text-muted">No vehicles found. Parse data from Glonass API to get started.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-terminal"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <p>Use these console commands to parse data from Glonass API:</p>
+                <div class="bg-dark text-light p-3 rounded">
+                    <code class="text-light">
+                        # Parse all vehicles<br>
+                        php bin/console app:parse:vehicles<br><br>
+
+                        # Parse command history for a specific vehicle<br>
+                        php bin/console app:parse:vehicle-history [VEHICLE_ID]<br><br>
+
+                        # Parse tracks for a specific vehicle<br>
+                        php bin/console app:parse:vehicle-tracks [VEHICLE_ID] --from="2024-01-01" --to="2024-01-31"
+                    </code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

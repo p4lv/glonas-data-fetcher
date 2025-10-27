@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:wiki.glonasssoft.ru)",
+      "Bash(composer init:*)",
+      "Bash(composer require:*)",
+      "Bash(composer config:*)",
+      "Bash(composer install:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)",
+      "Bash(php bin/console doctrine:migrations:diff:*)",
+      "Bash(composer dump-autoload:*)",
+      "Bash(php bin/console doctrine:database:create:*)",
+      "Bash(php bin/console doctrine:migrations:migrate:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

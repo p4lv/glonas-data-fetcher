@@ -1,0 +1,25 @@
+parameters:
+    glonass.api.url: '%env(GLONASS_API_URL)%'
+    glonass.api.login: '%env(GLONASS_API_LOGIN)%'
+    glonass.api.password: '%env(GLONASS_API_PASSWORD)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    App\Controller\:
+        resource: '../src/Controller/'
+        tags: ['controller.service_arguments']
+
+    App\Service\GlonassApiClient:
+        arguments:
+            $apiUrl: '%glonass.api.url%'
+            $login: '%glonass.api.login%'
+            $password: '%glonass.api.password%'

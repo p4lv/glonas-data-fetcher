@@ -1,0 +1,18 @@
+framework:
+    messenger:
+        failure_transport: failed
+
+        transports:
+            async:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+            failed: 'doctrine://default?queue_name=failed'
+
+        routing:
+            App\Message\ParseVehiclesMessage: async
+            App\Message\ParseVehicleHistoryMessage: async
+            App\Message\ParseVehicleTracksMessage: async
