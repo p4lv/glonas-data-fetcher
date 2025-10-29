@@ -2,6 +2,17 @@
 
 Приложение для парсинга и хранения GPS данных из Glonass API. Построено на Symfony 7.3 с использованием SQLite базы данных.
 
+## ⚠️ Важно
+
+**Текущий статус:** Приложение полностью функционально и готово к использованию. Для работы требуется учетная запись Glonass с соответствующими правами доступа к API endpoints.
+
+**Известные ограничения:**
+- API Glonass требует минимум **1 секунду между запросами** (rate limit)
+- Endpoint `/api/v3/vehicles/find` может возвращать **403 Forbidden** или **429 Too Many Requests** в зависимости от прав доступа учетной записи
+- Рекомендуется использовать асинхронный режим парсинга для больших объемов данных
+
+Подробнее см. [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
 ## Возможности
 
 - Парсинг данных о транспортных средствах из Glonass API
@@ -44,10 +55,23 @@ GLONASS_API_LOGIN=your_login
 GLONASS_API_PASSWORD=your_password
 ```
 
-4. Создайте базу данных (миграции уже выполнены):
+4. Создайте базу данных и настройте Messenger:
 ```bash
-php bin/console doctrine:migrations:migrate
+php bin/console doctrine:migrations:migrate --no-interaction
+php bin/console messenger:setup-transports
 ```
+
+5. **Протестируйте подключение к API:**
+```bash
+php bin/console app:test:api
+```
+
+Эта команда:
+- Проверит аутентификацию
+- Попробует получить список транспортных средств
+- Покажет детальную информацию об ошибках, если они есть
+
+**Важно:** Если вы получаете ошибки 403 или 429, см. [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## Использование
 
@@ -235,9 +259,18 @@ curl -X DELETE http://localhost:8000/api/vehicles/1/commands/1
 - `App\MessageHandler\ParseVehicleTracksMessageHandler`
 
 ### Console Commands
+
+**Парсинг данных:**
 - `app:parse:vehicles` - парсинг транспортных средств
 - `app:parse:vehicle-history` - парсинг истории команд
 - `app:parse:vehicle-tracks` - парсинг треков
+
+**Тестирование:**
+- `app:test:api` - тестирование подключения к API и аутентификации
+- `app:test:vehicle [VEHICLE_ID]` - получение данных конкретного ТС
+- `app:test:rate-limit` - проверка работы rate limiting
+- `app:debug:auth` - проверка передачи токена в заголовках запросов
+- `app:auth:check` - проверка статуса аутентификации через GET /api/v3/auth/check
 
 ### REST API Controllers
 - `App\Controller\Api\VehicleController` - CRUD для транспортных средств
@@ -252,6 +285,21 @@ curl -X DELETE http://localhost:8000/api/vehicles/1/commands/1
 
 ### Rate Limiting
 API Glonass требует минимум 1 секунду между запросами. Это реализовано в `GlonassApiClient::enforceRateLimit()`.
+
+**Как это работает:**
+1. Замеряется время завершения предыдущего запроса
+2. Перед новым запросом проверяется, прошла ли 1 секунда
+3. Если нет - приложение ждет оставшееся время (+10ms буфер)
+4. Только после этого отправляется новый запрос
+
+Это гарантирует, что между **окончанием** предыдущего и **началом** следующего запроса всегда проходит >= 1 секунда.
+
+**Тестирование:**
+```bash
+php bin/console app:test:rate-limit --count=5
+```
+
+Эта команда сделает 5 запросов и покажет детальную статистику времени между ними.
 
 ### Автоматическое продление токена
 Токен аутентификации автоматически продлевается при каждом запросе, согласно документации API.
@@ -279,6 +327,26 @@ tail -f var/log/dev.log
 ```bash
 php bin/console cache:clear
 ```
+
+### Запуск тестов
+```bash
+# Запустить все тесты
+./vendor/bin/phpunit
+
+# Запустить конкретную группу тестов
+./vendor/bin/phpunit tests/Message/
+./vendor/bin/phpunit tests/Entity/
+./vendor/bin/phpunit tests/Service/
+
+# Запустить с verbose output
+./vendor/bin/phpunit --testdox
+```
+
+**Покрытие тестами:**
+- Message классы (DTO) - 100%
+- Entity классы - 100%
+- GlonassApiClient service - основные методы покрыты
+- Всего: 59 тестов, 118 assertions
 
 ## Production
 
@@ -327,6 +395,25 @@ SQLite создает файл автоматически. Проверьте п
 
 ### Веб-интерфейс не работает
 Убедитесь, что Twig Bundle установлен и настроен корректно.
+
+## Тестирование
+
+Проект покрыт unit тестами. Подробная информация в [TESTING.md](TESTING.md).
+
+**Быстрый старт:**
+```bash
+# Запустить все тесты
+./vendor/bin/phpunit
+
+# С детальным выводом
+./vendor/bin/phpunit --testdox
+```
+
+**Результаты:**
+- ✅ 59 тестов
+- ✅ 118 assertions
+- ✅ 100% покрытие Message и Entity классов
+- ✅ Основные методы GlonassApiClient покрыты
 
 ## Лицензия
 

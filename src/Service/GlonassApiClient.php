@@ -36,7 +36,9 @@ class GlonassApiClient
 
             if (isset($response['AuthId'])) {
                 $this->authToken = $response['AuthId'];
-                $this->logger->info('Successfully authenticated to Glonass API');
+                $maskedToken = $this->maskToken($this->authToken);
+                $this->logger->info('Successfully authenticated to Glonass API '.$this->login);
+                $this->logger->info("Auth token received: {$this->authToken}");
                 return true;
             }
 
@@ -57,6 +59,13 @@ class GlonassApiClient
 
         $response = $this->makeRequest('POST', '/vehicles/find', $filters);
 
+        // API returns array directly, not wrapped in 'Vehicles' key
+        // If response is already an array with numeric keys, return it
+        if (isset($response[0]) || empty($response)) {
+            return $response;
+        }
+
+        // Fallback: check for 'Vehicles' key (in case API format changes)
         return $response['Vehicles'] ?? [];
     }
 
@@ -129,6 +138,23 @@ class GlonassApiClient
     }
 
     /**
+     * Check authentication status
+     */
+    public function checkAuth(): array
+    {
+        $this->ensureAuthenticated();
+
+        try {
+            $response = $this->makeRequest('GET', '/auth/check');
+            $this->logger->info('Auth check successful');
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error('Auth check failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * Logout and invalidate token
      */
     public function logout(): void
@@ -160,49 +186,110 @@ class GlonassApiClient
             ],
         ];
 
+        // Add authentication token if required
         if ($requiresAuth && $this->authToken) {
             $options['headers']['X-Auth'] = $this->authToken;
         }
 
-        if (!empty($data)) {
-            if ($method === 'GET') {
+        // Debug log headers (mask sensitive data)
+        $this->logger->info('Request headers:', [
+            'Content-Type' => $options['headers']['Content-Type'],
+            'X-Auth' => isset($options['headers']['X-Auth']) ? $this->maskToken($options['headers']['X-Auth']) : 'Not set',
+        ]);
+
+        // Handle request data
+        if ($method === 'GET') {
+            if (!empty($data)) {
                 $options['query'] = $data;
-            } else {
-                $options['json'] = $data;
             }
+        } else {
+            // For POST/PUT/PATCH always send JSON body
+            // Convert empty array [] to empty object {} for JSON encoding
+            $options['json'] = empty($data) ? new \stdClass() : $data;
+        }
+
+        // Debug log request body
+        if (isset($options['json'])) {
+            $body = $options['json'];
+            $this->logger->info('Request body (JSON):', ['body' => is_array($body) ? $body : json_encode($body)]);
+        } elseif (isset($options['query'])) {
+            $this->logger->info('Request query params:', $options['query']);
         }
 
         try {
+            $startTime = microtime(true);
+            $this->logger->info(sprintf('Request: "%s %s"', $method, $url));
+
             $response = $this->httpClient->request($method, $url, $options);
 
             $statusCode = $response->getStatusCode();
             $content = $response->getContent();
+            $duration = microtime(true) - $startTime;
+
+            // Обновляем время ПОСЛЕ получения ответа (а не перед отправкой)
+            $this->lastRequestTime = microtime(true);
+
+            $this->logger->info(sprintf(
+                'Response: "%d %s" %.6f seconds',
+                $statusCode,
+                $url,
+                $duration
+            ));
 
             if ($statusCode >= 200 && $statusCode < 300) {
-                return json_decode($content, true) ?? [];
+                $decoded = json_decode($content, true) ?? [];
+
+                // Debug: log response structure
+                $this->logger->debug('Response data keys:', ['keys' => array_keys($decoded)]);
+                if (isset($decoded['Vehicles'])) {
+                    $this->logger->info('Response contains Vehicles:', ['count' => count($decoded['Vehicles'])]);
+                }
+
+                return $decoded;
             }
 
             throw new \RuntimeException("API request failed with status {$statusCode}: {$content}");
         } catch (TransportExceptionInterface $e) {
+            // При ошибке тоже обновляем время
+            $this->lastRequestTime = microtime(true);
             $this->logger->error("Transport error during API request: " . $e->getMessage());
+            throw $e;
+        } catch (\Exception $e) {
+            // При любой другой ошибке тоже обновляем время
+            $this->lastRequestTime = microtime(true);
             throw $e;
         }
     }
 
     /**
      * Enforce rate limiting
+     * Ensures at least RATE_LIMIT_DELAY seconds between API requests
      */
     private function enforceRateLimit(): void
     {
+        // Если это первый запрос, ничего не делаем
+        if ($this->lastRequestTime === 0) {
+            return;
+        }
+
         $now = microtime(true);
         $timeSinceLastRequest = $now - $this->lastRequestTime;
 
+        // Если прошло меньше требуемой задержки, ждем
         if ($timeSinceLastRequest < self::RATE_LIMIT_DELAY) {
             $sleepTime = self::RATE_LIMIT_DELAY - $timeSinceLastRequest;
-            usleep((int)($sleepTime * 1000000));
-        }
 
-        $this->lastRequestTime = microtime(true);
+            $this->logger->debug(sprintf(
+                'Rate limiting: waiting %.3f seconds (elapsed: %.3f, required: %d)',
+                $sleepTime,
+                $timeSinceLastRequest,
+                self::RATE_LIMIT_DELAY
+            ));
+
+            // Ждем необходимое время (в микросекундах)
+            // Добавляем небольшой буфер (10ms) чтобы гарантировать >= 1 секунду
+            usleep((int)ceil(($sleepTime + 0.01) * 1000000));
+        }
     }
 
     /**
@@ -220,5 +307,28 @@ class GlonassApiClient
     public function isAuthenticated(): bool
     {
         return $this->authToken !== null;
+    }
+
+    /**
+     * Mask sensitive token for logging
+     * Shows only first and last 4 characters
+     */
+    private function maskToken(?string $token): string
+    {
+        if (!$token || strlen($token) <= 8) {
+            return '****';
+        }
+
+        $start = substr($token, 0, 4);
+        $end = substr($token, -4);
+        return "{$start}...{$end}";
+    }
+
+    /**
+     * Get current auth token (for debugging purposes)
+     */
+    public function getAuthToken(): ?string
+    {
+        return $this->authToken;
     }
 }

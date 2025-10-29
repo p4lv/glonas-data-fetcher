@@ -4,13 +4,11 @@ framework:
 
         transports:
             async:
-                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
-                options:
-                    auto_setup: true
+                dsn: 'doctrine://default?auto_setup=true'
                 retry_strategy:
                     max_retries: 3
                     multiplier: 2
-            failed: 'doctrine://default?queue_name=failed'
+            failed: 'doctrine://default?queue_name=failed&auto_setup=true'
 
         routing:
             App\Message\ParseVehiclesMessage: async
