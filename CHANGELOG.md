@@ -2,7 +2,108 @@
 
 All notable changes to Glonass Import API will be documented in this file.
 
+## [1.0.5] - 2025-10-29
+
+### Added
+- **GPS Status Tracking System**
+  - New fields in Vehicle entity:
+    - `gpsStatus` (online/offline/unknown) - Current GPS status
+    - `lastServerDataTime` - Copy of last position time for clarity
+    - `connectionStatus` (connected/disconnected/no_data) - Terminal connection status
+    - `statusCheckedAt` - Timestamp of last status check
+  - `Vehicle::updateGpsStatus()` - Automatically determine GPS status based on data freshness
+    - Online: Last position within 2 hours
+    - Offline: Last position older than 2 hours
+    - Unknown: No position data available
+  - `Vehicle::isGpsOnline()` - Quick check if GPS is online
+  - `Vehicle::hasGpsData()` - Check if vehicle has any GPS data
+
+- **Status Update Command & Automation**
+  - `app:update:vehicle-status` - Console command to update GPS statuses
+    - `--async` flag for background processing
+    - `--vehicle-id` to update specific vehicle
+    - Uses batch processing for all vehicles
+  - `UpdateVehicleStatusMessage` & Handler for Messenger integration
+  - Suitable for cron automation (every 2 hours recommended)
+
+- **UI Enhancements for GPS Status**
+  - GPS Status Overview dashboard with statistics:
+    - Online count (green badge)
+    - Offline count (red badge)
+    - Unknown count (gray badge)
+    - Total vehicles count
+  - GPS Status filter dropdown in vehicles list
+    - Filter by online/offline/unknown
+    - Combined with search and pagination
+  - Status badges in vehicles table:
+    - 🟢 Online (green) - GPS working, recent data
+    - 🔴 Offline (red) - GPS not responding, old data
+    - ⚪ Unknown (gray) - No GPS data available
+  - "Status Checked" column showing last verification time
+  - "Last Position" column enhanced with server data time
+
+- **Repository Enhancements**
+  - `VehicleRepository::findWithPaginationAndSearch()` - Added `$gpsStatusFilter` parameter
+  - `VehicleRepository::getGpsStatusStatistics()` - Get counts by status
+
+### Changed
+- `ParseVehiclesMessageHandler` now automatically updates GPS status when importing vehicles
+- Vehicles index page layout reorganized with status dashboard
+- Search form combined with status filter and page size selector
+- Pagination links preserve GPS status filter
+
+### Technical Details
+**GPS Status Logic:**
+- Status determined by comparing `lastPositionTime` with current time
+- Threshold: 2 hours (configurable via `updateGpsStatus($hours)` parameter)
+- Automatic updates on vehicle import and manual status refresh
+- Batch processing prevents memory issues with large vehicle counts
+
+**Automation Setup:**
+```bash
+# Add to crontab for automatic updates every 2 hours
+0 */2 * * * cd /path/to/project && php bin/console app:update:vehicle-status --async
+```
+
+## [1.0.4] - 2025-10-29
+
+### Added
+- **Pagination & Search for Vehicles Page**
+  - Implemented pagination with customizable page size (10, 25, 50, 100 items per page)
+  - Added search functionality across name, plateNumber, and externalId fields
+  - Bootstrap 5 pagination UI with "Previous/Next" buttons and page numbers
+  - Page size selector dropdown with auto-submit
+  - Results counter showing "Показаны записи X-Y из Z"
+  - Search results counter showing "Найдено: X записей"
+  - "Reset" button to clear search and show all results
+  - All state preserved in URL parameters (bookmarkable pages)
+  - Graceful handling of empty search results
+
+### Changed
+- `VehicleRepository::findWithPaginationAndSearch()` - New method for paginated queries
+  - Case-insensitive search using LOWER() SQL function
+  - OR conditions for searching across multiple fields
+  - Returns both results array and total count
+- `VehicleWebController::index()` - Updated to handle query parameters
+  - Accepts `q` (search query), `page` (current page), `limit` (items per page)
+  - Validates limit to allowed values [10, 25, 50, 100]
+  - Passes pagination state to template
+- `templates/vehicle/index.html.twig` - Complete UI overhaul
+  - Search form with input field and buttons
+  - Page size selector
+  - Bootstrap pagination component
+  - Improved empty state messages
+
 ## [1.0.3] - 2025-10-29
+
+### Added
+- **Batch Processing for Vehicle Import**
+  - Process 12,138 vehicles in batches of 100 to avoid memory exhaustion
+  - `ParseVehiclesMessageHandler::processBatch()` - Batch processing with memory management
+  - EntityManager::flush() after each batch
+  - EntityManager::clear() to free memory between batches
+  - Detailed progress logging for each batch
+  - Successfully processes large datasets without exceeding PHP memory limits
 
 ### Fixed
 - **Critical:** Fixed vehicles parsing - API returns array directly, not wrapped object

@@ -42,6 +42,18 @@ class Vehicle
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $lastPositionTime = null;
 
+    #[ORM\Column(type: Types::STRING, length: 20, nullable: true)]
+    private ?string $gpsStatus = 'unknown';
+
+    #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
+    private ?\DateTimeInterface $lastServerDataTime = null;
+
+    #[ORM\Column(type: Types::STRING, length: 20, nullable: true)]
+    private ?string $connectionStatus = 'no_data';
+
+    #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
+    private ?\DateTimeInterface $statusCheckedAt = null;
+
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $additionalData = null;
 
@@ -241,5 +253,99 @@ class Vehicle
         }
 
         return $this;
+    }
+
+    public function getGpsStatus(): ?string
+    {
+        return $this->gpsStatus;
+    }
+
+    public function setGpsStatus(?string $gpsStatus): static
+    {
+        $this->gpsStatus = $gpsStatus;
+        return $this;
+    }
+
+    public function getLastServerDataTime(): ?\DateTimeInterface
+    {
+        return $this->lastServerDataTime;
+    }
+
+    public function setLastServerDataTime(?\DateTimeInterface $lastServerDataTime): static
+    {
+        $this->lastServerDataTime = $lastServerDataTime;
+        return $this;
+    }
+
+    public function getConnectionStatus(): ?string
+    {
+        return $this->connectionStatus;
+    }
+
+    public function setConnectionStatus(?string $connectionStatus): static
+    {
+        $this->connectionStatus = $connectionStatus;
+        return $this;
+    }
+
+    public function getStatusCheckedAt(): ?\DateTimeInterface
+    {
+        return $this->statusCheckedAt;
+    }
+
+    public function setStatusCheckedAt(?\DateTimeInterface $statusCheckedAt): static
+    {
+        $this->statusCheckedAt = $statusCheckedAt;
+        return $this;
+    }
+
+    /**
+     * Update GPS status based on last position time
+     * GPS is considered:
+     * - "online" if lastPositionTime is within last 2 hours
+     * - "offline" if lastPositionTime is older than 2 hours
+     * - "unknown" if lastPositionTime is null
+     *
+     * @param int $offlineThresholdHours Hours threshold for considering GPS offline (default: 2)
+     */
+    public function updateGpsStatus(int $offlineThresholdHours = 2): void
+    {
+        $this->statusCheckedAt = new \DateTime();
+
+        if ($this->lastPositionTime === null) {
+            $this->gpsStatus = 'unknown';
+            $this->connectionStatus = 'no_data';
+            return;
+        }
+
+        // Copy lastPositionTime to lastServerDataTime for clarity
+        $this->lastServerDataTime = clone $this->lastPositionTime;
+
+        $now = new \DateTime();
+        $threshold = (new \DateTime())->modify("-{$offlineThresholdHours} hours");
+
+        if ($this->lastPositionTime >= $threshold) {
+            $this->gpsStatus = 'online';
+            $this->connectionStatus = 'connected';
+        } else {
+            $this->gpsStatus = 'offline';
+            $this->connectionStatus = 'disconnected';
+        }
+    }
+
+    /**
+     * Check if GPS is currently online (data within last 2 hours)
+     */
+    public function isGpsOnline(): bool
+    {
+        return $this->gpsStatus === 'online';
+    }
+
+    /**
+     * Check if vehicle has GPS data
+     */
+    public function hasGpsData(): bool
+    {
+        return $this->lastPositionTime !== null;
     }
 }

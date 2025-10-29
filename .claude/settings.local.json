@@ -19,7 +19,12 @@
       "Bash(timeout 30 php:*)",
       "Bash(/dev/null)",
       "Bash(./vendor/bin/phpunit tests/Message/)",
-      "Bash(./vendor/bin/phpunit:*)"
+      "Bash(./vendor/bin/phpunit:*)",
+      "Bash(timeout 120 php:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Read(//Users/pmx/Library/Application Support/JetBrains/PhpStorm2025.2/scratches/**)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

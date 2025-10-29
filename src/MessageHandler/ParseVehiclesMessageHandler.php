@@ -139,8 +139,16 @@ class ParseVehiclesMessageHandler
         $vehicle->setAdditionalData($vehicleData);
         $vehicle->setUpdatedAt(new \DateTime());
 
+        // Update GPS status based on last position time
+        $vehicle->updateGpsStatus();
+
         $this->entityManager->persist($vehicle);
 
-        $this->logger->debug(sprintf('Processed vehicle: %s (%s)', $vehicle->getName(), $externalId));
+        $this->logger->debug(sprintf(
+            'Processed vehicle: %s (%s) - GPS Status: %s',
+            $vehicle->getName(),
+            $externalId,
+            $vehicle->getGpsStatus()
+        ));
     }
 }

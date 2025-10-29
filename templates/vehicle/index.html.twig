@@ -9,6 +9,109 @@
     </div>
 </div>
 
+{# GPS Status Statistics #}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title mb-3">GPS Status Overview</h6>
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="mb-2">
+                            <span class="badge bg-success fs-5">{{ gpsStats.online }}</span>
+                        </div>
+                        <small class="text-muted">Online</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-2">
+                            <span class="badge bg-danger fs-5">{{ gpsStats.offline }}</span>
+                        </div>
+                        <small class="text-muted">Offline</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-2">
+                            <span class="badge bg-secondary fs-5">{{ gpsStats.unknown }}</span>
+                        </div>
+                        <small class="text-muted">Unknown</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-2">
+                            <span class="badge bg-primary fs-5">{{ gpsStats.total }}</span>
+                        </div>
+                        <small class="text-muted">Total</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Search and Filter Form #}
+<div class="row mb-3">
+    <div class="col-12">
+        <form method="get" action="{{ path('vehicles_index') }}" class="row g-3">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <input type="text"
+                           name="q"
+                           class="form-control"
+                           placeholder="Поиск по названию, госномеру или External ID"
+                           value="{{ searchQuery }}"
+                           aria-label="Search">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-search"></i> Искать
+                    </button>
+                    {% if searchQuery or gpsStatusFilter %}
+                        <a href="{{ path('vehicles_index', {limit: perPage}) }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Сбросить
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select name="status" class="form-select" onchange="this.form.submit()">
+                    <option value="">Все статусы GPS</option>
+                    <option value="online" {% if gpsStatusFilter == 'online' %}selected{% endif %}>✓ Только Online</option>
+                    <option value="offline" {% if gpsStatusFilter == 'offline' %}selected{% endif %}>✗ Только Offline</option>
+                    <option value="unknown" {% if gpsStatusFilter == 'unknown' %}selected{% endif %}>? Только Unknown</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="limit" class="form-select" onchange="this.form.submit()">
+                    <option value="10" {% if perPage == 10 %}selected{% endif %}>Показывать: 10</option>
+                    <option value="25" {% if perPage == 25 %}selected{% endif %}>Показывать: 25</option>
+                    <option value="50" {% if perPage == 50 %}selected{% endif %}>Показывать: 50</option>
+                    <option value="100" {% if perPage == 100 %}selected{% endif %}>Показывать: 100</option>
+                </select>
+            </div>
+            <input type="hidden" name="page" value="{{ currentPage }}">
+        </form>
+    </div>
+</div>
+
+{# Results Info #}
+<div class="row mb-2">
+    <div class="col-12">
+        {% if searchQuery %}
+            <p class="text-muted mb-0">
+                <i class="bi bi-funnel"></i> Найдено: <strong>{{ total }}</strong> записей
+                {% if total == 0 %}
+                    по запросу "<strong>{{ searchQuery }}</strong>"
+                {% endif %}
+            </p>
+        {% else %}
+            <p class="text-muted mb-0">
+                Всего записей: <strong>{{ total }}</strong>
+            </p>
+        {% endif %}
+        {% if vehicles|length > 0 %}
+            <small class="text-muted">
+                Показаны записи {{ ((currentPage - 1) * perPage) + 1 }}-{{ min(currentPage * perPage, total) }} из {{ total }}
+            </small>
+        {% endif %}
+    </div>
+</div>
+
 <div class="row">
     <div class="col-12">
         {% if vehicles|length > 0 %}
@@ -17,13 +120,13 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>External ID</th>
+                            <th>GPS Status</th>
                             <th>Name</th>
                             <th>Plate Number</th>
                             <th>GPS Position</th>
                             <th>Speed</th>
-                            <th>Course</th>
                             <th>Last Position</th>
+                            <th>Status Checked</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -31,7 +134,21 @@
                         {% for vehicle in vehicles %}
                             <tr>
                                 <td>{{ vehicle.id }}</td>
-                                <td><code>{{ vehicle.externalId }}</code></td>
+                                <td>
+                                    {% if vehicle.gpsStatus == 'online' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Online
+                                        </span>
+                                    {% elseif vehicle.gpsStatus == 'offline' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i> Offline
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-question-circle"></i> Unknown
+                                        </span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ vehicle.name ?? 'N/A' }}</td>
                                 <td>{{ vehicle.plateNumber ?? 'N/A' }}</td>
                                 <td>
@@ -49,15 +166,18 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if vehicle.course %}
-                                        {{ vehicle.course|number_format(1) }}°
+                                    {% if vehicle.lastPositionTime %}
+                                        <small>{{ vehicle.lastPositionTime|date('Y-m-d H:i:s') }}</small>
+                                        {% if vehicle.lastServerDataTime %}
+                                            <br><small class="text-muted">(Server: {{ vehicle.lastServerDataTime|date('Y-m-d H:i') }})</small>
+                                        {% endif %}
                                     {% else %}
-                                        <span class="text-muted">N/A</span>
+                                        <span class="text-muted">Never</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if vehicle.lastPositionTime %}
-                                        <small>{{ vehicle.lastPositionTime|date('Y-m-d H:i:s') }}</small>
+                                    {% if vehicle.statusCheckedAt %}
+                                        <small class="text-muted">{{ vehicle.statusCheckedAt|date('Y-m-d H:i:s') }}</small>
                                     {% else %}
                                         <span class="text-muted">Never</span>
                                     {% endif %}
@@ -81,17 +201,96 @@
                     </tbody>
                 </table>
             </div>
-            <div class="mt-3">
-                <p class="text-muted">Total: {{ vehicles|length }} vehicles</p>
-            </div>
+
+            {# Pagination #}
+            {% if totalPages > 1 %}
+                <div class="mt-3">
+                    <nav aria-label="Vehicles pagination">
+                        <ul class="pagination justify-content-center">
+                            {# Previous button #}
+                            <li class="page-item {% if currentPage == 1 %}disabled{% endif %}">
+                                {% if currentPage > 1 %}
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: currentPage - 1, limit: perPage}) }}">
+                                        <i class="bi bi-chevron-left"></i> Предыдущая
+                                    </a>
+                                {% else %}
+                                    <span class="page-link">
+                                        <i class="bi bi-chevron-left"></i> Предыдущая
+                                    </span>
+                                {% endif %}
+                            </li>
+
+                            {# Page numbers #}
+                            {% set startPage = max(1, currentPage - 2) %}
+                            {% set endPage = min(totalPages, currentPage + 2) %}
+
+                            {# First page #}
+                            {% if startPage > 1 %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: 1, limit: perPage}) }}">1</a>
+                                </li>
+                                {% if startPage > 2 %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                            {% endif %}
+
+                            {# Page range #}
+                            {% for page in startPage..endPage %}
+                                <li class="page-item {% if page == currentPage %}active{% endif %}">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: page, limit: perPage}) }}">
+                                        {{ page }}
+                                    </a>
+                                </li>
+                            {% endfor %}
+
+                            {# Last page #}
+                            {% if endPage < totalPages %}
+                                {% if endPage < totalPages - 1 %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: totalPages, limit: perPage}) }}">{{ totalPages }}</a>
+                                </li>
+                            {% endif %}
+
+                            {# Next button #}
+                            <li class="page-item {% if currentPage == totalPages %}disabled{% endif %}">
+                                {% if currentPage < totalPages %}
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: currentPage + 1, limit: perPage}) }}">
+                                        Следующая <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="page-link">
+                                        Следующая <i class="bi bi-chevron-right"></i>
+                                    </span>
+                                {% endif %}
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            {% endif %}
         {% else %}
-            <div class="alert alert-info">
-                <h4 class="alert-heading"><i class="bi bi-info-circle"></i> No Vehicles Found</h4>
-                <p>No vehicles have been imported yet. Run the parse command to import vehicles from Glonass API.</p>
-                <hr>
-                <p class="mb-0">
-                    <code>php bin/console app:parse:vehicles</code>
-                </p>
+            {# No results found #}
+            <div class="alert alert-warning">
+                <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Ничего не найдено</h4>
+                {% if searchQuery %}
+                    <p>По запросу "<strong>{{ searchQuery }}</strong>" ничего не найдено.</p>
+                    <p class="mb-0">
+                        <a href="{{ path('vehicles_index', {limit: perPage}) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-counterclockwise"></i> Показать все записи
+                        </a>
+                    </p>
+                {% else %}
+                    <p>No vehicles have been imported yet. Run the parse command to import vehicles from Glonass API.</p>
+                    <hr>
+                    <p class="mb-0">
+                        <code>php bin/console app:parse:vehicles</code>
+                    </p>
+                {% endif %}
             </div>
         {% endif %}
     </div>
