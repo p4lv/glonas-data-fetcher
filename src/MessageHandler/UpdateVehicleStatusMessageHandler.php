@@ -71,17 +71,16 @@ class UpdateVehicleStatusMessageHandler
             $totalCount = $this->vehicleRepository->count([]);
             $batchCount = (int)ceil($totalCount / self::BATCH_SIZE);
 
-            $this->logger->info(sprintf('Found %d vehicles in database to update (ordered by status check, oldest first)', $totalCount));
+            $this->logger->info(sprintf('Found %d vehicles in database to update (priority: unknown + never checked, then oldest checked first)', $totalCount));
             $this->logger->info(sprintf('Processing in %d batches of %d vehicles', $batchCount, self::BATCH_SIZE));
 
             // Process vehicles in batches - fetch each batch from database separately
             // This prevents memory issues and allows clear() to work properly
+            // Priority: unknown + never checked first, then oldest checked first
             for ($batchNumber = 0; $batchNumber < $batchCount; $batchNumber++) {
-                // Fetch this batch from database
+                // Fetch this batch from database with priority sorting
                 $offset = $batchNumber * self::BATCH_SIZE;
-                $batch = $this->vehicleRepository->findBy(
-                    [],
-                    ['statusCheckedAt' => 'ASC'],
+                $batch = $this->vehicleRepository->findForSyncPrioritized(
                     self::BATCH_SIZE,
                     $offset
                 );

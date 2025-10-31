@@ -181,6 +181,32 @@ class VehicleRepository extends ServiceEntityRepository
     }
 
     /**
+     * Find vehicles with pagination, prioritizing unknown status with null statusCheckedAt
+     * Used for synchronization to process never-checked unknown devices first
+     *
+     * @param int $limit Maximum number of results
+     * @param int $offset Starting offset
+     * @return array Array of Vehicle entities
+     */
+    public function findForSyncPrioritized(int $limit, int $offset): array
+    {
+        return $this->createQueryBuilder('v')
+            ->addSelect('
+                CASE
+                    WHEN v.gpsStatus = :unknownStatus AND v.statusCheckedAt IS NULL THEN 0
+                    ELSE 1
+                END AS HIDDEN priority
+            ')
+            ->setParameter('unknownStatus', 'unknown')
+            ->orderBy('priority', 'ASC')
+            ->addOrderBy('v.statusCheckedAt', 'ASC')  // Within each group, oldest first (NULL values come first)
+            ->setMaxResults($limit)
+            ->setFirstResult($offset)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Get detailed statistics about device types and their GPS statuses
      *
      * @return array [
