@@ -16,19 +16,25 @@
             <div class="card-body">
                 <h6 class="card-title mb-3">GPS Status Overview</h6>
                 <div class="row text-center">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="mb-2">
                             <span class="badge bg-success fs-5">{{ gpsStats.online }}</span>
                         </div>
                         <small class="text-muted">Online</small>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="mb-2">
                             <span class="badge bg-danger fs-5">{{ gpsStats.offline }}</span>
                         </div>
                         <small class="text-muted">Offline</small>
                     </div>
                     <div class="col-md-3">
+                        <div class="mb-2">
+                            <span class="badge bg-warning text-dark fs-5">{{ gpsStats.no_data }}</span>
+                        </div>
+                        <small class="text-muted">No Data</small>
+                    </div>
+                    <div class="col-md-2">
                         <div class="mb-2">
                             <span class="badge bg-secondary fs-5">{{ gpsStats.unknown }}</span>
                         </div>
@@ -40,6 +46,123 @@
                         </div>
                         <small class="text-muted">Total</small>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Device Type Statistics #}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title mb-3">Device Types Statistics</h6>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <span class="badge bg-primary fs-5 me-2">🛰️</span>
+                            <div>
+                                <small class="text-muted d-block">GPS Trackers</small>
+                                <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', q: searchQuery, status: gpsStatusFilter, limit: perPage}) }}" class="text-decoration-none">
+                                    <strong class="fs-5">{{ deviceTypeStats.gps_tracker.total }}</strong>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <span class="badge bg-info fs-5 me-2">📍</span>
+                            <div>
+                                <small class="text-muted d-block">Beacons (Маяки)</small>
+                                <a href="{{ path('vehicles_index', {device_type: 'beacon', q: searchQuery, status: gpsStatusFilter, limit: perPage}) }}" class="text-decoration-none">
+                                    <strong class="fs-5">{{ deviceTypeStats.beacon.total }}</strong>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <span class="badge bg-success fs-5 me-2">🔗</span>
+                            <div>
+                                <small class="text-muted d-block">Linked Pairs</small>
+                                <strong class="fs-5">{{ deviceTypeStats.linked_pairs }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th class="text-center">Total</th>
+                                <th class="text-center">Online</th>
+                                <th class="text-center">Offline</th>
+                                <th class="text-center">No Data</th>
+                                <th class="text-center">Unknown</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="badge bg-primary">🛰️ GPS</span></td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.total }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'online', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-success">{{ deviceTypeStats.gps_tracker.online }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'offline', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-danger">{{ deviceTypeStats.gps_tracker.offline }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'no_data', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-warning text-dark">{{ deviceTypeStats.gps_tracker.no_data }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'unknown', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-secondary">{{ deviceTypeStats.gps_tracker.unknown }}</span>
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info">📍 Beacon</span></td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.beacon.total }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'online', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-success">{{ deviceTypeStats.beacon.online }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'offline', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-danger">{{ deviceTypeStats.beacon.offline }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'no_data', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-warning text-dark">{{ deviceTypeStats.beacon.no_data }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'unknown', q: searchQuery, limit: perPage}) }}" class="text-decoration-none">
+                                        <span class="badge bg-secondary">{{ deviceTypeStats.beacon.unknown }}</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -61,22 +184,30 @@
                     <button class="btn btn-primary" type="submit">
                         <i class="bi bi-search"></i> Искать
                     </button>
-                    {% if searchQuery or gpsStatusFilter %}
+                    {% if searchQuery or gpsStatusFilter or deviceTypeFilter %}
                         <a href="{{ path('vehicles_index', {limit: perPage}) }}" class="btn btn-outline-secondary">
                             <i class="bi bi-x-circle"></i> Сбросить
                         </a>
                     {% endif %}
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <select name="status" class="form-select" onchange="this.form.submit()">
                     <option value="">Все статусы GPS</option>
                     <option value="online" {% if gpsStatusFilter == 'online' %}selected{% endif %}>✓ Только Online</option>
                     <option value="offline" {% if gpsStatusFilter == 'offline' %}selected{% endif %}>✗ Только Offline</option>
+                    <option value="no_data" {% if gpsStatusFilter == 'no_data' %}selected{% endif %}>⚠ Только No Data</option>
                     <option value="unknown" {% if gpsStatusFilter == 'unknown' %}selected{% endif %}>? Только Unknown</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <select name="device_type" class="form-select" onchange="this.form.submit()">
+                    <option value="">Все типы устройств</option>
+                    <option value="gps_tracker" {% if deviceTypeFilter == 'gps_tracker' %}selected{% endif %}>🛰️ GPS Tracker</option>
+                    <option value="beacon" {% if deviceTypeFilter == 'beacon' %}selected{% endif %}>📍 Маяк</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <select name="limit" class="form-select" onchange="this.form.submit()">
                     <option value="10" {% if perPage == 10 %}selected{% endif %}>Показывать: 10</option>
                     <option value="25" {% if perPage == 25 %}selected{% endif %}>Показывать: 25</option>
@@ -120,6 +251,7 @@
                     <thead>
                         <tr>
                             <th>ID</th>
+                            <th>Device Type</th>
                             <th>GPS Status</th>
                             <th>Name</th>
                             <th>Plate Number</th>
@@ -135,6 +267,13 @@
                             <tr>
                                 <td>{{ vehicle.id }}</td>
                                 <td>
+                                    {% if vehicle.deviceType == 'beacon' %}
+                                        <span class="badge bg-info">📍 Маяк</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">🛰️ GPS</span>
+                                    {% endif %}
+                                </td>
+                                <td>
                                     {% if vehicle.gpsStatus == 'online' %}
                                         <span class="badge bg-success">
                                             <i class="bi bi-check-circle"></i> Online
@@ -142,6 +281,10 @@
                                     {% elseif vehicle.gpsStatus == 'offline' %}
                                         <span class="badge bg-danger">
                                             <i class="bi bi-x-circle"></i> Offline
+                                        </span>
+                                    {% elseif vehicle.gpsStatus == 'no_data' %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-exclamation-triangle"></i> No Data
                                         </span>
                                     {% else %}
                                         <span class="badge bg-secondary">
@@ -210,7 +353,7 @@
                             {# Previous button #}
                             <li class="page-item {% if currentPage == 1 %}disabled{% endif %}">
                                 {% if currentPage > 1 %}
-                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: currentPage - 1, limit: perPage}) }}">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, device_type: deviceTypeFilter, page: currentPage - 1, limit: perPage}) }}">
                                         <i class="bi bi-chevron-left"></i> Предыдущая
                                     </a>
                                 {% else %}
@@ -227,7 +370,7 @@
                             {# First page #}
                             {% if startPage > 1 %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: 1, limit: perPage}) }}">1</a>
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, device_type: deviceTypeFilter, page: 1, limit: perPage}) }}">1</a>
                                 </li>
                                 {% if startPage > 2 %}
                                     <li class="page-item disabled">
@@ -239,7 +382,7 @@
                             {# Page range #}
                             {% for page in startPage..endPage %}
                                 <li class="page-item {% if page == currentPage %}active{% endif %}">
-                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: page, limit: perPage}) }}">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, device_type: deviceTypeFilter, page: page, limit: perPage}) }}">
                                         {{ page }}
                                     </a>
                                 </li>
@@ -253,14 +396,14 @@
                                     </li>
                                 {% endif %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: totalPages, limit: perPage}) }}">{{ totalPages }}</a>
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, device_type: deviceTypeFilter, page: totalPages, limit: perPage}) }}">{{ totalPages }}</a>
                                 </li>
                             {% endif %}
 
                             {# Next button #}
                             <li class="page-item {% if currentPage == totalPages %}disabled{% endif %}">
                                 {% if currentPage < totalPages %}
-                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, page: currentPage + 1, limit: perPage}) }}">
+                                    <a class="page-link" href="{{ path('vehicles_index', {q: searchQuery, status: gpsStatusFilter, device_type: deviceTypeFilter, page: currentPage + 1, limit: perPage}) }}">
                                         Следующая <i class="bi bi-chevron-right"></i>
                                     </a>
                                 {% else %}

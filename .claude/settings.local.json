@@ -24,7 +24,11 @@
       "Bash(curl:*)",
       "Bash(pkill:*)",
       "Read(//Users/pmx/Library/Application Support/JetBrains/PhpStorm2025.2/scratches/**)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(lsof:*)",
+      "Bash(awk:*)",
+      "Bash(php -r:*)",
+      "Bash(php -d memory_limit=512M:*)"
     ],
     "deny": [],
     "ask": []

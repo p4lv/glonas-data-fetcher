@@ -54,6 +54,13 @@ class Vehicle
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $statusCheckedAt = null;
 
+    #[ORM\Column(type: Types::STRING, length: 20, nullable: true)]
+    private ?string $deviceType = 'gps_tracker';
+
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'parent_vehicle_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?self $parentVehicle = null;
+
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $additionalData = null;
 
@@ -347,5 +354,73 @@ class Vehicle
     public function hasGpsData(): bool
     {
         return $this->lastPositionTime !== null;
+    }
+
+    public function getDeviceType(): ?string
+    {
+        return $this->deviceType;
+    }
+
+    public function setDeviceType(?string $deviceType): static
+    {
+        $this->deviceType = $deviceType;
+        return $this;
+    }
+
+    public function getParentVehicle(): ?self
+    {
+        return $this->parentVehicle;
+    }
+
+    public function setParentVehicle(?self $parentVehicle): static
+    {
+        $this->parentVehicle = $parentVehicle;
+        return $this;
+    }
+
+    /**
+     * Determine device type based on vehicle name
+     * - "beacon" if name contains "(маяк)" or "(asset tracker)"
+     * - "gps_tracker" otherwise
+     */
+    public function determineDeviceType(): void
+    {
+        if ($this->name === null) {
+            $this->deviceType = 'gps_tracker';
+            return;
+        }
+
+        $nameLower = mb_strtolower($this->name);
+
+        if (str_contains($nameLower, '(маяк)') || str_contains($nameLower, '(asset tracker)')) {
+            $this->deviceType = 'beacon';
+        } else {
+            $this->deviceType = 'gps_tracker';
+        }
+    }
+
+    /**
+     * Get base name without beacon markers for finding paired devices
+     * Removes " (маяк)" or " (asset tracker)" from the name
+     */
+    public function getBaseName(): ?string
+    {
+        if ($this->name === null) {
+            return null;
+        }
+
+        $baseName = $this->name;
+        $baseName = preg_replace('/\s*\(маяк\)\s*$/iu', '', $baseName);
+        $baseName = preg_replace('/\s*\(asset tracker\)\s*$/iu', '', $baseName);
+
+        return trim($baseName);
+    }
+
+    /**
+     * Check if this is a beacon device
+     */
+    public function isBeacon(): bool
+    {
+        return $this->deviceType === 'beacon';
     }
 }

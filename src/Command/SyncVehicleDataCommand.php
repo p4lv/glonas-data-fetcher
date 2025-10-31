@@ -12,10 +12,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsCommand(
-    name: 'app:update:vehicle-status',
-    description: 'Update GPS status for all vehicles or specific vehicle',
+    name: 'app:sync:vehicle-data',
+    description: 'Synchronize vehicle data from Glonass API (GPS, speed, status)',
+    aliases: ['app:update:vehicle-status']
 )]
-class UpdateVehicleStatusCommand extends Command
+class SyncVehicleDataCommand extends Command
 {
     public function __construct(
         private readonly MessageBusInterface $messageBus
@@ -37,12 +38,12 @@ class UpdateVehicleStatusCommand extends Command
         $async = $input->getOption('async');
         $vehicleId = $input->getOption('vehicle-id');
 
-        $io->title('Update Vehicle GPS Status');
+        $io->title('Synchronize Vehicle Data from Glonass API');
 
         if ($vehicleId) {
-            $io->section("Updating status for vehicle: {$vehicleId}");
+            $io->section("Synchronizing data for vehicle: {$vehicleId}");
         } else {
-            $io->section('Updating status for all vehicles');
+            $io->section('Synchronizing data for all vehicles');
         }
 
         try {
@@ -54,15 +55,23 @@ class UpdateVehicleStatusCommand extends Command
             $this->messageBus->dispatch($message);
 
             if ($async) {
-                $io->success('Status update task queued successfully. Run messenger:consume to process.');
+                $io->success('Data synchronization queued. Run messenger:consume to process.');
+                $io->note([
+                    'This synchronizes GPS coordinates, speed, and status for all vehicles.',
+                    'Uses POST /api/v3/vehicles/getlastdata endpoint',
+                    'Batch size: 25 vehicles, Rate limit: 2 seconds between requests',
+                    'Processes oldest-checked vehicles first',
+                    'Processing ~12,000 vehicles takes approximately 17 minutes (486 batches × 2 sec)',
+                ]);
             } else {
-                $io->success('Status update completed successfully!');
+                $io->success('Data synchronization completed!');
             }
 
             if ($vehicleId) {
-                $io->info("Updated vehicle: {$vehicleId}");
+                $io->info("Synchronized vehicle: {$vehicleId}");
             } else {
-                $io->info('All vehicles have been updated with current GPS status');
+                $io->info('All vehicles synchronized with latest API data');
+                $io->note('GPS status auto-updated based on last position time');
             }
 
             return Command::SUCCESS;

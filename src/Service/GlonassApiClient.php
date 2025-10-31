@@ -9,7 +9,7 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 class GlonassApiClient
 {
     private const API_VERSION = 'v3';
-    private const RATE_LIMIT_DELAY = 1; // 1 second between requests
+    private const RATE_LIMIT_DELAY = 2; // 2 seconds between requests
 
     private ?string $authToken = null;
     private float $lastRequestTime = 0;
@@ -82,6 +82,41 @@ class GlonassApiClient
             $this->logger->error("Failed to get vehicle {$vehicleId}: " . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Get last data for vehicles (current position, speed, etc.)
+     *
+     * @param array $vehicleIds Array of vehicle IDs to get data for
+     * @return array Array of vehicle data
+     */
+    public function getLastData(array $vehicleIds): array
+    {
+        $this->ensureAuthenticated();
+
+        try {
+            // API expects array of IDs directly: [55728, 12345]
+            // NOT wrapped in object: {"vehicleIds": [...]}
+            $response = $this->makeRequest('POST', '/vehicles/getlastdata', $vehicleIds);
+
+            // Response format: array of vehicle data objects
+            return is_array($response) ? $response : [];
+        } catch (\Exception $e) {
+            $this->logger->error("Failed to get last data for vehicles: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get last data for single vehicle
+     *
+     * @param string $vehicleId Vehicle ID
+     * @return array|null Vehicle data or null if not found
+     */
+    public function getLastDataForVehicle(string $vehicleId): ?array
+    {
+        $result = $this->getLastData([$vehicleId]);
+        return !empty($result) ? $result[0] : null;
     }
 
     /**
@@ -241,9 +276,11 @@ class GlonassApiClient
 
                 // Debug: log response structure
                 $this->logger->debug('Response data keys:', ['keys' => array_keys($decoded)]);
-                if (isset($decoded['Vehicles'])) {
-                    $this->logger->info('Response contains Vehicles:', ['count' => count($decoded['Vehicles'])]);
-                }
+//                if (isset($decoded['Vehicles'])) {
+                    $this->logger->info('Response contains Vehicles:', ['count' => count($decoded)]);
+//                }
+
+//                $this->logger->debug('ssss', $decoded);
 
                 return $decoded;
             }

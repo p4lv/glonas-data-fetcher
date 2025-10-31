@@ -2,6 +2,150 @@
 
 All notable changes to Glonass Import API will be documented in this file.
 
+## [1.0.7] - 2025-10-30
+
+### Changed
+- **Vehicle Data Synchronization Now Uses `/vehicles/getlastdata` Endpoint**
+  - Updated `UpdateVehicleStatusMessageHandler` to use POST `/api/v3/vehicles/getlastdata`
+  - More efficient than `/vehicles/find` - only fetches last data for existing vehicles
+  - **Optimized batch processing**:
+    - Batch size reduced from 100 to 25 vehicles (avoids API rate limiting)
+    - Rate limit increased from 1 to 2 seconds between requests
+    - Vehicles sorted by `status_checked_at` (oldest first) - prioritizes long-unchecked vehicles
+  - Processes 12,139 vehicles in 486 batches (~17 minutes)
+  - Each vehicle gets real-time GPS data: coordinates, speed, course, recordTime
+  - Handles vehicles with no GPS data gracefully (null values)
+  - Successfully tested without 403 Forbidden errors
+
+### Fixed
+- **getlastdata API Request Format**
+  - Fixed request body format: API expects array of IDs `[800213974, 800255515]`
+  - Previously was sending `{"vehicleIds": [...]}` which caused 400 errors
+  - Now correctly sends plain array of integer IDs
+
+### Added
+- **New GPS Status: `no_data`**
+  - Added `no_data` status for vehicles that exist in API but have no GPS data
+  - Automatically set when API returns response but all GPS fields are null
+  - Displayed with ⚠️ yellow/warning badge in UI
+  - Added to GPS Status filter dropdown
+  - Added to statistics dashboard (Online/Offline/No Data/Unknown/Total)
+  - Applied when:
+    - API returns no data at all for vehicle
+    - API returns vehicle data but latitude, longitude, and recordTime are all null
+  - Different from `unknown`: `no_data` means we checked and confirmed no GPS data available
+
+- **Single Vehicle Refresh Feature on Web UI**
+  - Added "Refresh" button on vehicle details page (e.g., `/vehicles/12087`)
+  - Fetches latest GPS data from Glonass API in real-time (< 50ms)
+  - Updates coordinates, speed, course, last position time, GPS status
+  - Automatically sets status to `no_data` when API returns no GPS data
+  - Shows success message with updated GPS status and speed
+  - Handles vehicles without GPS data gracefully with warning message
+  - Route: `POST /vehicles/{id}/refresh`
+  - Added GPS Status badge to vehicle details page (Online/Offline/No Data/Unknown)
+  - Added "Status Checked" timestamp display
+
+- **API Client Methods**
+  - `GlonassApiClient::getLastData()` - Fetch last data for multiple vehicles
+  - `GlonassApiClient::getLastDataForVehicle()` - Fetch last data for single vehicle
+
+- **Repository Methods**
+  - `VehicleRepository::findAllOrderedByStatusCheck()` - Get vehicles sorted by status_checked_at (oldest first, NULL first)
+
+- **Message Handler Methods**
+  - `UpdateVehicleStatusMessageHandler::processBatchWithGetLastData()` - New batch processor
+  - `UpdateVehicleStatusMessageHandler::updateVehicleDataFromGetLastData()` - Handle getlastdata response format
+
+- **Controller Action**
+  - `VehicleWebController::refresh()` - Refresh single vehicle data from web UI
+
+- **Development Tools**
+  - `TestGetlastdataCommand` - Test command for getlastdata endpoint
+
+- **Configuration Constants**
+  - `UpdateVehicleStatusMessageHandler::BATCH_SIZE` changed from 100 to 25
+  - `GlonassApiClient::RATE_LIMIT_DELAY` changed from 1 to 2 seconds
+
+### Technical Notes
+
+**API Endpoint Correct Usage:**
+```bash
+# Correct format: plain array of external IDs
+curl -X POST "https://regions.glonasssoft.ru/api/v3/vehicles/getlastdata" \
+  -H "Content-Type: application/json" \
+  -H "X-Auth: <TOKEN>" \
+  -d "[800213974, 800255515]"
+```
+
+**Response Format:**
+```json
+[
+  {
+    "vehicleId": 800213974,
+    "vehicleGuid": "83aee233-a3cb-4fca-8530-3ab725cd9618",
+    "vehicleNumber": "Маяк хард",
+    "receiveTime": "2025-05-21T07:49:14.0996687Z",
+    "recordTime": "2025-05-21T07:49:13Z",
+    "state": 1,
+    "speed": 0,
+    "course": 235,
+    "latitude": 43.2453,
+    "longitude": 76.8505,
+    "address": "улица Отарская, Алматы, Казахстан",
+    "geozones": []
+  }
+]
+```
+
+**Performance:**
+- 12,139 vehicles processed in ~2 minutes
+- 122 API calls (100 vehicles per batch)
+- Rate limiting: 1 second between requests
+- Much faster than `/vehicles/find` which returns ALL vehicles
+
+**Automation:**
+```bash
+# Sync every 2 hours via cron
+0 */2 * * * cd /path && php bin/console app:sync:vehicle-data --async
+```
+
+## [1.0.6] - 2025-10-29
+
+### Added
+- **Vehicle Data Synchronization Command**
+  - `app:sync:vehicle-data` - New command to synchronize vehicle data from API
+    - Alias for `app:update:vehicle-status` for clearer naming
+    - Synchronizes GPS coordinates, speed, course, and timestamps
+    - Auto-updates GPS status (online/offline/unknown) based on data freshness
+    - Supports `--async` flag for background processing
+    - Supports `--vehicle-id=ID` for single vehicle updates
+    - Uses batch processing (100 vehicles per batch)
+  - Enhanced messaging with processing time estimates
+  - Clear documentation of API endpoint used (POST /api/v3/vehicles/find)
+
+### Changed
+- Command descriptions improved for better clarity
+- Success messages now include technical details about data source
+
+### Technical Notes
+**API Endpoint Research:**
+- Investigated POST /api/v3/vehicles/getlastdata endpoint
+- Initial attempts returned 400 validation errors due to incorrect request format
+- Solution found: API expects plain array of IDs, not wrapped in object
+
+**Data Synchronization:**
+- `/vehicles/find` returns complete vehicle list with current data
+- Data is real-time or near-real-time from Glonass servers
+- Rate limiting: 1 second between API calls (automatically handled)
+- ~12,000 vehicles processed in 20-30 seconds
+
+**Automation:**
+```bash
+# Sync every 2 hours via cron
+0 */2 * * * cd /path && php bin/console app:sync:vehicle-data --async
+```
+
 ## [1.0.5] - 2025-10-29
 
 ### Added

@@ -15,11 +15,13 @@ class HomeController extends AbstractController
         $vehicles = $vehicleRepository->findAll();
         $totalVehicles = count($vehicles);
         $vehiclesWithPosition = count($vehicleRepository->findAllWithRecentPosition());
+        $deviceTypeStats = $vehicleRepository->getDeviceTypeStatistics();
 
         return $this->render('home/index.html.twig', [
             'totalVehicles' => $totalVehicles,
             'vehiclesWithPosition' => $vehiclesWithPosition,
             'recentVehicles' => array_slice($vehicles, 0, 10),
+            'deviceTypeStats' => $deviceTypeStats,
         ]);
     }
 }

@@ -12,7 +12,7 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 #[AsMessageHandler]
 class UpdateVehicleStatusMessageHandler
 {
-    private const BATCH_SIZE = 100;
+    private const BATCH_SIZE = 25;
 
     public function __construct(
         private readonly GlonassApiClient $apiClient,
@@ -64,22 +64,33 @@ class UpdateVehicleStatusMessageHandler
 
     private function updateAllVehicles(array $filters): void
     {
-        $this->logger->info('Starting vehicle status update for all vehicles');
+        $this->logger->info('Starting vehicle status update for all vehicles using /vehicles/getlastdata endpoint');
 
         try {
-            $vehicles = $this->apiClient->getVehicles($filters);
-            $totalCount = count($vehicles);
+            // Get total count for progress tracking
+            $totalCount = $this->vehicleRepository->count([]);
+            $batchCount = (int)ceil($totalCount / self::BATCH_SIZE);
 
-            $this->logger->info(sprintf('Found %d vehicles to update', $totalCount));
-
-            // Process in batches
-            $batches = array_chunk($vehicles, self::BATCH_SIZE);
-            $batchCount = count($batches);
-
+            $this->logger->info(sprintf('Found %d vehicles in database to update (ordered by status check, oldest first)', $totalCount));
             $this->logger->info(sprintf('Processing in %d batches of %d vehicles', $batchCount, self::BATCH_SIZE));
 
-            foreach ($batches as $batchNumber => $batch) {
-                $this->processBatch($batch, $batchNumber + 1, $totalCount);
+            // Process vehicles in batches - fetch each batch from database separately
+            // This prevents memory issues and allows clear() to work properly
+            for ($batchNumber = 0; $batchNumber < $batchCount; $batchNumber++) {
+                // Fetch this batch from database
+                $offset = $batchNumber * self::BATCH_SIZE;
+                $batch = $this->vehicleRepository->findBy(
+                    [],
+                    ['statusCheckedAt' => 'ASC'],
+                    self::BATCH_SIZE,
+                    $offset
+                );
+
+                if (empty($batch)) {
+                    break;
+                }
+
+                $this->processBatchWithGetLastData($batch, $batchNumber + 1, $totalCount);
             }
 
             $this->logger->info('Vehicle status update completed successfully', [
@@ -88,6 +99,80 @@ class UpdateVehicleStatusMessageHandler
             ]);
         } catch (\Exception $e) {
             $this->logger->error('Vehicle status update failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function processBatchWithGetLastData(array $batch, int $batchNumber, int $total): void
+    {
+        $startTime = microtime(true);
+
+        // Extract external IDs from vehicle entities
+        $externalIds = array_map(fn($vehicle) => (int)$vehicle->getExternalId(), $batch);
+
+        $this->logger->info(sprintf(
+            'Fetching data for batch %d with %d vehicle IDs',
+            $batchNumber,
+            count($externalIds)
+        ));
+
+        // Fetch data from API using getlastdata endpoint
+        try {
+            $vehiclesData = $this->apiClient->getLastData($externalIds);
+
+            $this->logger->info(sprintf('Received %d vehicle records from API', count($vehiclesData)));
+
+            // Create a map of externalId => vehicleData for quick lookup
+            $dataMap = [];
+            foreach ($vehiclesData as $vehicleData) {
+                $vehicleId = $vehicleData['vehicleId'] ?? null;
+                if ($vehicleId) {
+                    $dataMap[$vehicleId] = $vehicleData;
+                }
+            }
+
+            // Update each vehicle with data from API
+            foreach ($batch as $vehicle) {
+                $externalId = (int)$vehicle->getExternalId();
+                if (isset($dataMap[$externalId])) {
+                    $this->updateVehicleDataFromGetLastData($vehicle, $dataMap[$externalId]);
+                } else {
+                    // No data from API - set status to no_data
+                    $vehicle->setGpsStatus('no_data');
+                    $vehicle->setConnectionStatus('no_data');
+                    $vehicle->setStatusCheckedAt(new \DateTime());
+                    $vehicle->setUpdatedAt(new \DateTime());
+
+                    $this->logger->debug(sprintf(
+                        'No data returned from API for vehicle %s (%d) - set status to no_data',
+                        $vehicle->getName(),
+                        $externalId
+                    ));
+                }
+            }
+
+            $this->entityManager->flush();
+            $this->entityManager->clear();
+
+            // Force garbage collection every 10 batches to prevent memory buildup
+            if ($batchNumber % 10 === 0) {
+                gc_collect_cycles();
+            }
+
+            $duration = microtime(true) - $startTime;
+            $processed = $batchNumber * self::BATCH_SIZE;
+            $processed = min($processed, $total);
+
+            $this->logger->info(sprintf(
+                'Batch %d/%d processed (%d/%d vehicles) in %.2f seconds',
+                $batchNumber,
+                (int)ceil($total / self::BATCH_SIZE),
+                $processed,
+                $total,
+                $duration
+            ));
+        } catch (\Exception $e) {
+            $this->logger->error(sprintf('Failed to process batch %d: %s', $batchNumber, $e->getMessage()));
             throw $e;
         }
     }
@@ -135,6 +220,71 @@ class UpdateVehicleStatusMessageHandler
 
         $this->updateVehicleData($vehicle, $vehicleData);
         $this->entityManager->persist($vehicle);
+    }
+
+    private function updateVehicleDataFromGetLastData($vehicle, array $vehicleData): void
+    {
+        // Check if API returned data but all GPS fields are null
+        $hasGpsData = (isset($vehicleData['latitude']) && $vehicleData['latitude'] !== null) ||
+                      (isset($vehicleData['longitude']) && $vehicleData['longitude'] !== null) ||
+                      (isset($vehicleData['recordTime']) && $vehicleData['recordTime'] !== null);
+
+        if (!$hasGpsData) {
+            // API returned vehicle but no GPS data - set status to no_data
+            $vehicle->setGpsStatus('no_data');
+            $vehicle->setConnectionStatus('no_data');
+            $vehicle->setStatusCheckedAt(new \DateTime());
+            $vehicle->setUpdatedAt(new \DateTime());
+
+            $this->logger->debug(sprintf(
+                'Vehicle %s (%s) exists in API but has no GPS data - set status to no_data',
+                $vehicle->getName(),
+                $vehicle->getExternalId()
+            ));
+            return;
+        }
+
+        // Update GPS coordinates if available
+        if (isset($vehicleData['latitude']) && $vehicleData['latitude'] !== null) {
+            $vehicle->setLatitude((float)$vehicleData['latitude']);
+        }
+
+        if (isset($vehicleData['longitude']) && $vehicleData['longitude'] !== null) {
+            $vehicle->setLongitude((float)$vehicleData['longitude']);
+        }
+
+        if (isset($vehicleData['speed']) && $vehicleData['speed'] !== null) {
+            $vehicle->setSpeed((float)$vehicleData['speed']);
+        }
+
+        if (isset($vehicleData['course']) && $vehicleData['course'] !== null) {
+            $vehicle->setCourse((float)$vehicleData['course']);
+        }
+
+        // Update last position time from recordTime
+        if (isset($vehicleData['recordTime']) && $vehicleData['recordTime'] !== null) {
+            try {
+                $vehicle->setLastPositionTime(new \DateTime($vehicleData['recordTime']));
+            } catch (\Exception $e) {
+                $this->logger->warning("Failed to parse recordTime: " . $e->getMessage());
+            }
+        }
+
+        // Update GPS status based on last position time
+        $vehicle->updateGpsStatus();
+
+        // Update timestamp
+        $vehicle->setUpdatedAt(new \DateTime());
+
+        $this->logger->debug(sprintf(
+            'Updated vehicle: %s (%s) - GPS Status: %s, Speed: %s, Lat/Lon: %s/%s',
+            $vehicle->getName(),
+            $vehicle->getExternalId(),
+            $vehicle->getGpsStatus(),
+            $vehicleData['speed'] ?? 'null',
+            $vehicleData['latitude'] ?? 'null',
+            $vehicleData['longitude'] ?? 'null'
+        ));
     }
 
     private function updateVehicleData($vehicle, array $vehicleData): void

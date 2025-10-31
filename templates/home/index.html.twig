@@ -42,6 +42,164 @@
     </div>
 </div>
 
+{# Device Type Statistics #}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Device Types Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-primary fs-4 me-3">🛰️</span>
+                            <div>
+                                <h5 class="mb-0">GPS Trackers</h5>
+                                <p class="mb-0 text-muted">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.total }}</strong> устройств
+                                    </a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-info fs-4 me-3">📍</span>
+                            <div>
+                                <h5 class="mb-0">Beacons (Маяки)</h5>
+                                <p class="mb-0 text-muted">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.beacon.total }}</strong> устройств
+                                    </a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-success fs-4 me-3">🔗</span>
+                            <div>
+                                <h5 class="mb-0">Linked Pairs</h5>
+                                <p class="mb-0 text-muted"><strong>{{ deviceTypeStats.linked_pairs }}</strong> связанных пар</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="mt-4 mb-3">GPS Status Breakdown by Device Type:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Device Type</th>
+                                <th class="text-center">Total</th>
+                                <th class="text-center">Online</th>
+                                <th class="text-center">Offline</th>
+                                <th class="text-center">No Data</th>
+                                <th class="text-center">Unknown</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <span class="badge bg-primary">🛰️ GPS Tracker</span>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.total }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'online'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-success">{{ deviceTypeStats.gps_tracker.online }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'offline'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-danger">{{ deviceTypeStats.gps_tracker.offline }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'no_data'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-warning text-dark">{{ deviceTypeStats.gps_tracker.no_data }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'gps_tracker', status: 'unknown'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-secondary">{{ deviceTypeStats.gps_tracker.unknown }}</span>
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <span class="badge bg-info">📍 Beacon (Маяк)</span>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.beacon.total }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'online'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-success">{{ deviceTypeStats.beacon.online }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'offline'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-danger">{{ deviceTypeStats.beacon.offline }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'no_data'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-warning text-dark">{{ deviceTypeStats.beacon.no_data }}</span>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {device_type: 'beacon', status: 'unknown'}) }}" class="text-decoration-none">
+                                        <span class="badge bg-secondary">{{ deviceTypeStats.beacon.unknown }}</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <td><strong>Total Devices</strong></td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index') }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.total_devices }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {status: 'online'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.online + deviceTypeStats.beacon.online }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {status: 'offline'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.offline + deviceTypeStats.beacon.offline }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {status: 'no_data'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.no_data + deviceTypeStats.beacon.no_data }}</strong>
+                                    </a>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ path('vehicles_index', {status: 'unknown'}) }}" class="text-decoration-none">
+                                        <strong>{{ deviceTypeStats.gps_tracker.unknown + deviceTypeStats.beacon.unknown }}</strong>
+                                    </a>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-12">
         <div class="card">

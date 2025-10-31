@@ -3,10 +3,14 @@
 namespace App\Controller;
 
 use App\Entity\Vehicle;
+use App\Message\UpdateVehicleStatusMessage;
 use App\Repository\VehicleRepository;
+use App\Service\GlonassApiClient;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/vehicles', name: 'vehicles_')]
@@ -20,6 +24,7 @@ class VehicleWebController extends AbstractController
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = (int) $request->query->get('limit', 25);
         $gpsStatusFilter = $request->query->get('status', '');
+        $deviceTypeFilter = $request->query->get('device_type', '');
 
         // Validate perPage to allowed values
         $allowedLimits = [10, 25, 50, 100];
@@ -28,9 +33,15 @@ class VehicleWebController extends AbstractController
         }
 
         // Validate GPS status filter
-        $validStatuses = ['online', 'offline', 'unknown'];
+        $validStatuses = ['online', 'offline', 'no_data', 'unknown'];
         if (!in_array($gpsStatusFilter, $validStatuses, true)) {
             $gpsStatusFilter = null;
+        }
+
+        // Validate device type filter
+        $validDeviceTypes = ['gps_tracker', 'beacon'];
+        if (!in_array($deviceTypeFilter, $validDeviceTypes, true)) {
+            $deviceTypeFilter = null;
         }
 
         // Get paginated and filtered results
@@ -38,7 +49,8 @@ class VehicleWebController extends AbstractController
             $searchQuery,
             $page,
             $perPage,
-            $gpsStatusFilter
+            $gpsStatusFilter,
+            $deviceTypeFilter
         );
 
         $vehicles = $result['results'];
@@ -48,6 +60,9 @@ class VehicleWebController extends AbstractController
         // Get GPS status statistics
         $gpsStats = $vehicleRepository->getGpsStatusStatistics();
 
+        // Get device type statistics
+        $deviceTypeStats = $vehicleRepository->getDeviceTypeStatistics();
+
         return $this->render('vehicle/index.html.twig', [
             'vehicles' => $vehicles,
             'total' => $total,
@@ -56,7 +71,9 @@ class VehicleWebController extends AbstractController
             'totalPages' => $totalPages,
             'searchQuery' => $searchQuery,
             'gpsStatusFilter' => $gpsStatusFilter,
+            'deviceTypeFilter' => $deviceTypeFilter,
             'gpsStats' => $gpsStats,
+            'deviceTypeStats' => $deviceTypeStats,
         ]);
     }
 
@@ -66,6 +83,90 @@ class VehicleWebController extends AbstractController
         return $this->render('vehicle/show.html.twig', [
             'vehicle' => $vehicle,
         ]);
+    }
+
+    #[Route('/{id}/refresh', name: 'refresh', methods: ['POST'])]
+    public function refresh(
+        Vehicle $vehicle,
+        GlonassApiClient $apiClient,
+        EntityManagerInterface $entityManager
+    ): Response {
+        try {
+            // Get latest data from API
+            $lastData = $apiClient->getLastDataForVehicle($vehicle->getExternalId());
+
+            if (!$lastData) {
+                // Set GPS status to no_data when API returns no data
+                $vehicle->setGpsStatus('no_data');
+                $vehicle->setConnectionStatus('no_data');
+                $vehicle->setStatusCheckedAt(new \DateTime());
+                $vehicle->setUpdatedAt(new \DateTime());
+
+                $entityManager->flush();
+
+                $this->addFlash('warning', 'No data returned from API for this vehicle. Status set to NO_DATA.');
+                return $this->redirectToRoute('vehicles_show', ['id' => $vehicle->getId()]);
+            }
+
+            // Check if API returned data but all GPS fields are null
+            $hasGpsData = (isset($lastData['latitude']) && $lastData['latitude'] !== null) ||
+                          (isset($lastData['longitude']) && $lastData['longitude'] !== null) ||
+                          (isset($lastData['recordTime']) && $lastData['recordTime'] !== null);
+
+            if (!$hasGpsData) {
+                // Vehicle exists in API but has no GPS data
+                $vehicle->setGpsStatus('no_data');
+                $vehicle->setConnectionStatus('no_data');
+                $vehicle->setStatusCheckedAt(new \DateTime());
+                $vehicle->setUpdatedAt(new \DateTime());
+
+                $entityManager->flush();
+
+                $this->addFlash('warning', 'Vehicle exists in API but has no GPS data. Status set to NO_DATA.');
+                return $this->redirectToRoute('vehicles_show', ['id' => $vehicle->getId()]);
+            }
+
+            // Update vehicle with fresh data
+            if (isset($lastData['latitude']) && $lastData['latitude'] !== null) {
+                $vehicle->setLatitude((float)$lastData['latitude']);
+            }
+
+            if (isset($lastData['longitude']) && $lastData['longitude'] !== null) {
+                $vehicle->setLongitude((float)$lastData['longitude']);
+            }
+
+            if (isset($lastData['speed']) && $lastData['speed'] !== null) {
+                $vehicle->setSpeed((float)$lastData['speed']);
+            }
+
+            if (isset($lastData['course']) && $lastData['course'] !== null) {
+                $vehicle->setCourse((float)$lastData['course']);
+            }
+
+            if (isset($lastData['recordTime']) && $lastData['recordTime'] !== null) {
+                try {
+                    $vehicle->setLastPositionTime(new \DateTime($lastData['recordTime']));
+                } catch (\Exception $e) {
+                    // Ignore date parsing errors
+                }
+            }
+
+            // Update GPS status based on last position time
+            $vehicle->updateGpsStatus();
+            $vehicle->setUpdatedAt(new \DateTime());
+
+            $entityManager->flush();
+
+            $this->addFlash('success', sprintf(
+                'Vehicle data refreshed successfully! GPS Status: %s, Speed: %s km/h',
+                $vehicle->getGpsStatus(),
+                $lastData['speed'] ?? 'N/A'
+            ));
+        } catch (\Exception $e) {
+            $this->addFlash('error', 'Failed to refresh vehicle data: ' . $e->getMessage());
+        }
+
+        return $this->redirectToRoute('vehicles_show', ['id' => $vehicle->getId()]);
     }
 
     #[Route('/{id}/delete', name: 'delete', methods: ['POST'])]

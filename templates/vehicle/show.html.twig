@@ -48,11 +48,47 @@
 
     <div class="col-md-6">
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-geo-alt"></i> GPS Position</h5>
+                <form method="post" action="{{ path('vehicles_refresh', {id: vehicle.id}) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-sm btn-success" title="Refresh data from Glonass API">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </form>
             </div>
             <div class="card-body">
                 <dl class="row">
+                    <dt class="col-sm-4">Device Type:</dt>
+                    <dd class="col-sm-8">
+                        {% if vehicle.deviceType == 'beacon' %}
+                            <span class="badge bg-info">📍 Beacon (Маяк)</span>
+                        {% else %}
+                            <span class="badge bg-primary">🛰️ GPS Tracker</span>
+                        {% endif %}
+                    </dd>
+
+                    {% if vehicle.parentVehicle %}
+                        <dt class="col-sm-4">Paired Device:</dt>
+                        <dd class="col-sm-8">
+                            <a href="{{ path('vehicles_show', {'id': vehicle.parentVehicle.id}) }}" class="text-decoration-none">
+                                {{ vehicle.parentVehicle.name }}
+                            </a>
+                        </dd>
+                    {% endif %}
+
+                    <dt class="col-sm-4">GPS Status:</dt>
+                    <dd class="col-sm-8">
+                        {% if vehicle.gpsStatus == 'online' %}
+                            <span class="badge bg-success">🟢 Online</span>
+                        {% elseif vehicle.gpsStatus == 'offline' %}
+                            <span class="badge bg-danger">🔴 Offline</span>
+                        {% elseif vehicle.gpsStatus == 'no_data' %}
+                            <span class="badge bg-warning text-dark">⚠️ No Data</span>
+                        {% else %}
+                            <span class="badge bg-secondary">⚪ Unknown</span>
+                        {% endif %}
+                    </dd>
+
                     <dt class="col-sm-4">Latitude:</dt>
                     <dd class="col-sm-8">{{ vehicle.latitude ? vehicle.latitude|number_format(6) : 'N/A' }}</dd>
 
@@ -67,6 +103,11 @@
 
                     <dt class="col-sm-4">Last Position:</dt>
                     <dd class="col-sm-8">{{ vehicle.lastPositionTime ? vehicle.lastPositionTime|date('Y-m-d H:i:s') : 'Never' }}</dd>
+
+                    {% if vehicle.statusCheckedAt %}
+                        <dt class="col-sm-4">Status Checked:</dt>
+                        <dd class="col-sm-8">{{ vehicle.statusCheckedAt|date('Y-m-d H:i:s') }}</dd>
+                    {% endif %}
                 </dl>
 
                 {% if vehicle.latitude and vehicle.longitude %}
