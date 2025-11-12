@@ -1,0 +1,13 @@
+.git
+.gitignore
+.idea
+.phpunit.cache
+var/cache/*
+var/log/*
+var/data.db
+vendor
+composer.lock
+.env.local
+*.md
+tests
+docker
