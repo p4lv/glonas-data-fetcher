@@ -13,7 +13,7 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 #[AsMessageHandler]
 class ParseVehiclesMessageHandler
 {
-    private const BATCH_SIZE = 200; // Process 100 vehicles at a time
+    private const BATCH_SIZE = 50; // Process 50 vehicles at a time to reduce memory usage
 
     public function __construct(
         private readonly GlonassApiClient $apiClient,
@@ -39,36 +39,38 @@ class ParseVehiclesMessageHandler
         ]);
 
         try {
-            // Use generator for memory-efficient processing
-            $vehicleGenerator = $this->apiClient->getVehiclesGenerator($message->getFilters(), self::BATCH_SIZE);
+            // Fetch all vehicles directly (API doesn't support pagination anyway)
+            $this->logger->info('Fetching vehicles from API...');
+            $vehicles = $this->apiClient->getVehicles($message->getFilters());
+            $totalCount = count($vehicles);
 
+            $this->logger->info("Fetched {$totalCount} vehicles, processing in batches of " . self::BATCH_SIZE);
+
+            // Process in batches to reduce memory usage
             $processedCount = 0;
             $batchNumber = 0;
-            $currentBatch = [];
 
-
-
-            foreach ($vehicleGenerator as $vehicleData) {
-                $currentBatch[] = $vehicleData;
-                $peakMemory = memory_get_peak_usage(true);
-                $this->logger->error('Current batch ' , [
-                    'peak_memory' => $this->formatBytes($peakMemory)
-                ]);
-                // When batch is full, process it
-                if (count($currentBatch) >= self::BATCH_SIZE) {
-                    $batchNumber++;
-                    $this->processBatch($currentBatch, $batchNumber);
-                    $processedCount += count($currentBatch);
-                    $currentBatch = []; // Clear batch
-                }
-            }
-
-            // Process remaining vehicles in the last batch
-            if (!empty($currentBatch)) {
+            // Split into chunks without loading all into memory at once
+            for ($offset = 0; $offset < $totalCount; $offset += self::BATCH_SIZE) {
                 $batchNumber++;
-                $this->processBatch($currentBatch, $batchNumber);
-                $processedCount += count($currentBatch);
+                $batch = array_slice($vehicles, $offset, self::BATCH_SIZE);
+
+                $this->processBatch($batch, $batchNumber);
+                $processedCount += count($batch);
+
+                // Force garbage collection after each batch
+                gc_collect_cycles();
+
+                $this->logger->info(sprintf(
+                    'Progress: %d/%d vehicles (%.1f%%)',
+                    $processedCount,
+                    $totalCount,
+                    ($processedCount / $totalCount) * 100
+                ));
             }
+
+            // Clear the original vehicles array to free memory
+            unset($vehicles);
 
             $peakMemory = memory_get_peak_usage(true);
             $this->logger->info('Vehicles parsing completed successfully', [
@@ -89,9 +91,29 @@ class ParseVehiclesMessageHandler
     private function processBatch(array $batch, int $batchNumber): void
     {
         $startTime = microtime(true);
+        $memoryBefore = memory_get_usage(true);
 
+        // Extract all external IDs from the batch
+        $externalIds = [];
         foreach ($batch as $vehicleData) {
-            $this->processVehicle($vehicleData);
+            $externalId = $vehicleData['vehicleId'] ?? $vehicleData['Id'] ?? $vehicleData['VehicleId'] ?? $vehicleData['vehicleGuid'] ?? null;
+            if ($externalId) {
+                $externalIds[] = (string)$externalId;
+            }
+        }
+
+        // Load all existing vehicles in ONE query instead of N queries
+        $existingVehicles = [];
+        if (!empty($externalIds)) {
+            $vehicles = $this->vehicleRepository->findBy(['externalId' => $externalIds]);
+            foreach ($vehicles as $vehicle) {
+                $existingVehicles[$vehicle->getExternalId()] = $vehicle;
+            }
+        }
+
+        // Process each vehicle
+        foreach ($batch as $vehicleData) {
+            $this->processVehicle($vehicleData, $existingVehicles);
         }
 
         // Flush changes to database
@@ -100,18 +122,23 @@ class ParseVehiclesMessageHandler
         // Clear EntityManager to free memory
         $this->entityManager->clear();
 
+        // Explicitly clear the local variables
+        unset($existingVehicles, $externalIds, $batch);
+
         $duration = microtime(true) - $startTime;
-        $batchSize = count($batch);
+        $memoryAfter = memory_get_usage(true);
+        $memoryDelta = $memoryAfter - $memoryBefore;
 
         $this->logger->info(sprintf(
-            'Batch %d processed (%d vehicles) in %.2f seconds',
+            'Batch %d processed in %.2f seconds | Memory: %s (delta: %s)',
             $batchNumber,
-            $batchSize,
-            $duration
+            $duration,
+            $this->formatBytes($memoryAfter),
+            $this->formatBytes($memoryDelta)
         ));
     }
 
-    private function processVehicle(array $vehicleData): void
+    private function processVehicle(array $vehicleData, array &$existingVehicles): void
     {
         // Try different ID field names (API uses camelCase)
         $externalId = $vehicleData['vehicleId'] ?? $vehicleData['Id'] ?? $vehicleData['VehicleId'] ?? $vehicleData['vehicleGuid'] ?? null;
@@ -121,12 +148,14 @@ class ParseVehiclesMessageHandler
             return;
         }
 
-        // Use findOneBy instead of custom method (works after clear())
-        $vehicle = $this->vehicleRepository->findOneBy(['externalId' => (string)$externalId]);
+        $externalId = (string)$externalId;
+
+        // Use pre-loaded vehicle from batch query instead of individual findOneBy
+        $vehicle = $existingVehicles[$externalId] ?? null;
 
         if (!$vehicle) {
             $vehicle = new Vehicle();
-            $vehicle->setExternalId((string)$externalId);
+            $vehicle->setExternalId($externalId);
             $vehicle->setCreatedAt(new \DateTime());
         }
 
@@ -165,8 +194,35 @@ class ParseVehiclesMessageHandler
             }
         }
 
-        // Store all additional data in JSON field
-        $vehicle->setAdditionalData($vehicleData);
+        // Store only NON-extracted fields in additionalData to avoid duplication
+        // Remove fields that are already stored in dedicated columns
+        $additionalData = $vehicleData;
+        unset(
+            $additionalData['vehicleId'],
+            $additionalData['Id'],
+            $additionalData['VehicleId'],
+            $additionalData['vehicleGuid'],
+            $additionalData['name'],
+            $additionalData['plateNumber'],
+            $additionalData['latitude'],
+            $additionalData['Latitude'],
+            $additionalData['longitude'],
+            $additionalData['Longitude'],
+            $additionalData['speed'],
+            $additionalData['Speed'],
+            $additionalData['course'],
+            $additionalData['Course'],
+            $additionalData['lastPositionTime'],
+            $additionalData['LastPositionTime']
+        );
+
+        // Only store if there's actually additional data left
+        if (!empty($additionalData)) {
+            $vehicle->setAdditionalData($additionalData);
+        } else {
+            $vehicle->setAdditionalData(null);
+        }
+
         $vehicle->setUpdatedAt(new \DateTime());
 
         // Update GPS status based on last position time

@@ -39,6 +39,13 @@ class GlonassApiClient
                 $maskedToken = $this->maskToken($this->authToken);
                 $this->logger->info('Successfully authenticated to Glonass API '.$this->login);
                 $this->logger->info("Auth token received: {$this->authToken}");
+
+                // IMPORTANT: API requires ~10 seconds after authentication before allowing /getlastdata requests
+                // Without this delay, first few requests will get 403 Forbidden
+                // Tested: 5 sec = still get 403, 10 sec = works
+                $this->logger->info('Waiting 10 seconds after authentication (API requirement for /getlastdata endpoint)');
+                sleep(10);
+
                 return true;
             }
 
