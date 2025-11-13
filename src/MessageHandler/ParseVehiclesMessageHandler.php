@@ -13,7 +13,7 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 #[AsMessageHandler]
 class ParseVehiclesMessageHandler
 {
-    private const BATCH_SIZE = 100; // Process 100 vehicles at a time
+    private const BATCH_SIZE = 200; // Process 100 vehicles at a time
 
     public function __construct(
         private readonly GlonassApiClient $apiClient,
@@ -27,33 +27,66 @@ class ParseVehiclesMessageHandler
     {
         $this->logger->info('Starting vehicles parsing');
 
+        // TEMPORARY FIX: Increase memory limit to handle large API responses
+        // TODO: Replace with proper streaming/pagination once API capabilities are verified
+        $originalMemoryLimit = ini_get('memory_limit');
+        ini_set('memory_limit', '1024M');
+
+        $this->logger->info('Memory limit increased', [
+            'original' => $originalMemoryLimit,
+            'new' => ini_get('memory_limit'),
+            'current_usage' => $this->formatBytes(memory_get_usage(true))
+        ]);
+
         try {
-            $vehicles = $this->apiClient->getVehicles($message->getFilters());
-            $totalCount = count($vehicles);
+            // Use generator for memory-efficient processing
+            $vehicleGenerator = $this->apiClient->getVehiclesGenerator($message->getFilters(), self::BATCH_SIZE);
 
-            $this->logger->info(sprintf('Found %d vehicles', $totalCount));
+            $processedCount = 0;
+            $batchNumber = 0;
+            $currentBatch = [];
 
-            // Process in batches to avoid memory exhaustion
-            $batches = array_chunk($vehicles, self::BATCH_SIZE);
-            $batchCount = count($batches);
 
-            $this->logger->info(sprintf('Processing in %d batches of %d vehicles', $batchCount, self::BATCH_SIZE));
 
-            foreach ($batches as $batchNumber => $batch) {
-                $this->processBatch($batch, $batchNumber + 1, $totalCount);
+            foreach ($vehicleGenerator as $vehicleData) {
+                $currentBatch[] = $vehicleData;
+                $peakMemory = memory_get_peak_usage(true);
+                $this->logger->error('Current batch ' , [
+                    'peak_memory' => $this->formatBytes($peakMemory)
+                ]);
+                // When batch is full, process it
+                if (count($currentBatch) >= self::BATCH_SIZE) {
+                    $batchNumber++;
+                    $this->processBatch($currentBatch, $batchNumber);
+                    $processedCount += count($currentBatch);
+                    $currentBatch = []; // Clear batch
+                }
             }
 
+            // Process remaining vehicles in the last batch
+            if (!empty($currentBatch)) {
+                $batchNumber++;
+                $this->processBatch($currentBatch, $batchNumber);
+                $processedCount += count($currentBatch);
+            }
+
+            $peakMemory = memory_get_peak_usage(true);
             $this->logger->info('Vehicles parsing completed successfully', [
-                'total' => $totalCount,
-                'batches' => $batchCount,
+                'total' => $processedCount,
+                'batches' => $batchNumber,
+                'peak_memory' => $this->formatBytes($peakMemory),
+                'memory_limit' => ini_get('memory_limit')
             ]);
-        } catch (\Exception $e) {
-            $this->logger->error('Vehicles parsing failed: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $peakMemory = memory_get_peak_usage(true);
+            $this->logger->error('Vehicles parsing failed: ' . $e->getMessage(), [
+                'peak_memory' => $this->formatBytes($peakMemory)
+            ]);
             throw $e;
         }
     }
 
-    private function processBatch(array $batch, int $batchNumber, int $total): void
+    private function processBatch(array $batch, int $batchNumber): void
     {
         $startTime = microtime(true);
 
@@ -68,15 +101,12 @@ class ParseVehiclesMessageHandler
         $this->entityManager->clear();
 
         $duration = microtime(true) - $startTime;
-        $processed = $batchNumber * self::BATCH_SIZE;
-        $processed = min($processed, $total); // Don't exceed total
+        $batchSize = count($batch);
 
         $this->logger->info(sprintf(
-            'Batch %d/%d processed (%d/%d vehicles) in %.2f seconds',
+            'Batch %d processed (%d vehicles) in %.2f seconds',
             $batchNumber,
-            (int)ceil($total / self::BATCH_SIZE),
-            $processed,
-            $total,
+            $batchSize,
             $duration
         ));
     }
@@ -150,5 +180,19 @@ class ParseVehiclesMessageHandler
             $externalId,
             $vehicle->getGpsStatus()
         ));
+    }
+
+    /**
+     * Format bytes to human-readable format
+     */
+    private function formatBytes(int $bytes): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, 2) . ' ' . $units[$pow];
     }
 }

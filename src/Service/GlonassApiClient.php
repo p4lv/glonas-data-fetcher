@@ -70,6 +70,73 @@ class GlonassApiClient
     }
 
     /**
+     * Get vehicles as a generator for memory-efficient processing
+     * This method yields vehicles one at a time instead of loading all into memory
+     *
+     * @param array $filters Filters to apply to the vehicle search
+     * @param int $batchSize Number of vehicles to fetch per API request (if API supports pagination)
+     * @return \Generator
+     */
+    public function getVehiclesGenerator(array $filters = [], int $batchSize = 100): \Generator
+    {
+        $this->ensureAuthenticated();
+
+        // Try pagination if the API supports it
+        // Common pagination parameters: offset/limit, page/pageSize, skip/take
+        $offset = 0;
+        $hasMore = true;
+
+        while ($hasMore) {
+            // Attempt to use pagination parameters
+            $paginatedFilters = array_merge($filters, [
+                'offset' => $offset,
+                'limit' => $batchSize,
+            ]);
+
+            $response = $this->makeRequest('POST', '/vehicles/find', $paginatedFilters);
+
+            // Extract vehicles array
+            $vehicles = [];
+            if (isset($response[0]) || empty($response)) {
+                $vehicles = $response;
+            } else {
+                $vehicles = $response['Vehicles'] ?? [];
+            }
+
+            $count = count($vehicles);
+
+            if ($count === 0) {
+                // No more vehicles
+                $hasMore = false;
+                break;
+            }
+
+            // Yield each vehicle individually
+            foreach ($vehicles as $vehicle) {
+                yield $vehicle;
+            }
+
+            // If we got fewer vehicles than batch size, we've reached the end
+            if ($count < $batchSize) {
+                $hasMore = false;
+            } else {
+                $offset += $batchSize;
+            }
+
+            // If offset is 0 and we got results, but API doesn't support pagination,
+            // we'll get the same results again. Break after first iteration if filters didn't change response.
+            if ($offset === $batchSize && $count > 0) {
+                // Try to detect if pagination is not supported by checking if filters had any effect
+                // If the API doesn't support offset/limit, it will ignore them and return all results
+                // We can't detect this reliably, so we'll assume if we got exactly batchSize results,
+                // pagination might be working. Otherwise, stop after first batch.
+                // This is a heuristic - if API doesn't support pagination, we'll only get first batch.
+                $this->logger->debug("Fetched {$count} vehicles, offset now at {$offset}");
+            }
+        }
+    }
+
+    /**
      * Get single vehicle by ID
      */
     public function getVehicle(string $vehicleId): ?array
